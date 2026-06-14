@@ -1,0 +1,2 @@
+# cronos
+Juego de mesa
