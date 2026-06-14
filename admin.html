@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cronos · Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--ink:#14172B;--ink-2:#1E2240;--ink-3:#272C50;--gold:#E0A82E;--gold-soft:#F0CD7A;
+    --teal:#3FA796;--brick:#C0493B;--text:#EDE8DA;--muted:#9298BE;
+    --display:'Fraunces',Georgia,serif;--body:'Inter',system-ui,sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ink);color:var(--text);font-family:var(--body);-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:920px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+  .logo{font-family:var(--display);font-weight:900;font-size:24px}
+  .logo span{color:var(--gold)} .logo small{font-family:var(--body);font-weight:600;font-size:11px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-left:8px}
+  input,select{background:var(--ink-2);border:1px solid var(--ink-3);color:var(--text);font-family:var(--body);
+    font-size:14px;padding:10px 12px;border-radius:9px}
+  input:focus,select:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
+  button{font-family:var(--body);cursor:pointer;border:none;border-radius:9px;font-weight:600;transition:.15s}
+  .btn-gold{background:var(--gold);color:var(--ink);padding:10px 18px}
+  .btn-gold:hover{background:var(--gold-soft)}
+  .btn-ghost{background:none;border:1px solid var(--ink-3);color:var(--muted);padding:8px 14px;font-size:13px}
+  .btn-ghost:hover{border-color:var(--gold);color:var(--gold-soft)}
+  .btn-del{background:none;border:1px solid #5A3A3A;color:#E8897E;padding:7px 10px;font-size:12px}
+  .btn-del:hover{background:rgba(192,73,59,.15)}
+  .hide{display:none!important}
+
+  /* login */
+  .login{max-width:360px;margin:8vh auto 0;text-align:center;display:flex;flex-direction:column;gap:14px}
+  .login h1{font-family:var(--display);font-weight:600;font-size:26px}
+  .login p{color:var(--muted);font-size:14px;line-height:1.5}
+  .login input{width:100%;text-align:left}
+  .err{color:#E8897E;font-size:13px;min-height:18px}
+
+  /* toolbar */
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--ink-2);border:1px solid var(--ink-3);
+    border-radius:14px;padding:14px;margin-bottom:16px}
+  .toolbar .grow{flex:1;min-width:140px}
+  .toolbar label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+  .status-pill{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:99px}
+  .sp-jugar{background:rgba(224,168,46,.18);color:var(--gold-soft)}
+  .sp-pronto{background:var(--ink-3);color:var(--muted)}
+  .sp-spotify{background:rgba(63,167,150,.18);color:#7FD8C9}
+
+  /* add form */
+  .addcard{display:grid;grid-template-columns:1fr 140px 110px auto;gap:10px;align-items:end;background:var(--ink-2);
+    border:1px solid var(--ink-3);border-radius:14px;padding:14px;margin-bottom:16px}
+  @media(max-width:640px){.addcard{grid-template-columns:1fr 1fr}}
+  .addcard input{width:100%}
+
+  /* list */
+  .count{font-size:13px;color:var(--muted);margin:0 2px 8px}
+  .rowcard{display:grid;grid-template-columns:1fr 130px 96px auto auto;gap:10px;align-items:center;
+    background:var(--ink-2);border:1px solid var(--ink-3);border-radius:11px;padding:10px 12px;margin-bottom:8px}
+  @media(max-width:640px){.rowcard{grid-template-columns:1fr 1fr;row-gap:8px}}
+  .rowcard input{width:100%}
+  .rowcard .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .rowcard.dirty{border-color:var(--gold)}
+  .rowcard.off{opacity:.55}
+  .saved{color:var(--teal);font-size:12px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">CRO<span>NOS</span><small>Admin</small></div>
+    <button id="logoutBtn" class="btn-ghost hide">Cerrar sesión</button>
+  </header>
+
+  <!-- LOGIN -->
+  <section id="loginView" class="login hide">
+    <h1>Panel de Cronos</h1>
+    <p>Identifícate para gestionar las cartas. Solo administradores.</p>
+    <input id="email" type="email" placeholder="email" autocomplete="username">
+    <input id="password" type="password" placeholder="contraseña" autocomplete="current-password">
+    <button id="loginBtn" class="btn-gold">Entrar</button>
+    <div id="loginErr" class="err"></div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="adminView" class="hide">
+    <div class="toolbar">
+      <div class="grow">
+        <label>Tema</label>
+        <select id="themeSel" style="width:100%"></select>
+      </div>
+      <div>
+        <label>Estado del tema</label>
+        <select id="statusSel">
+          <option value="jugar">Jugar</option>
+          <option value="pronto">Pronto</option>
+          <option value="spotify">Con Spotify</option>
+        </select>
+      </div>
+      <div class="grow">
+        <label>Buscar</label>
+        <input id="search" placeholder="filtrar cartas…" style="width:100%">
+      </div>
+    </div>
+
+    <div class="addcard">
+      <div><label id="lblPrimary">Texto</label><input id="newPrimary" placeholder="p. ej. Cae el Muro de Berlín"></div>
+      <div><label>Categoría</label><input id="newCat" placeholder="Historia"></div>
+      <div><label id="lblValue">Año</label><input id="newValue" type="number" inputmode="numeric"></div>
+      <button id="addBtn" class="btn-gold">Añadir</button>
+    </div>
+
+    <div class="count" id="count">—</div>
+    <div id="list"></div>
+  </section>
+</div>
+
+<script>
+/* ====================== CONFIG (misma que el juego; anon key es pública) ====================== */
+const SUPABASE_URL  = "https://wwpsnatlpxmlyjmvties.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHNuYXRscHhtbHlqbXZ0aWVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NjAzNTMsImV4cCI6MjA5NzAzNjM1M30.yYLhfk1sUzHJ_JDiQAzboWUbxX9iKFYd_3J_G7iSm1k";
+
+const VK_LABEL = {year:'Año', age_from_birth:'Año nacimiento', amount:'Precio', measure:'Valor'};
+const $=id=>document.getElementById(id);
+let db=null, themes=[], theme=null, cards=[];
+
+function showView(v){
+  $('loginView').classList.toggle('hide', v!=='login');
+  $('adminView').classList.toggle('hide', v!=='admin');
+  $('logoutBtn').classList.toggle('hide', v!=='admin');
+}
+
+/* ---------- arranque + sesión ---------- */
+async function boot(){
+  if(SUPABASE_URL.includes('TU-PROYECTO')){
+    $('loginView').classList.remove('hide');
+    $('loginErr').textContent='Configura SUPABASE_URL y SUPABASE_ANON en el código.';
+    return;
+  }
+  db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  const {data:{session}} = await db.auth.getSession();
+  if(session){ await enterAdmin(); } else { showView('login'); }
+}
+
+$('loginBtn').onclick = async ()=>{
+  $('loginErr').textContent='';
+  const email=$('email').value.trim(), password=$('password').value;
+  const {error} = await db.auth.signInWithPassword({email,password});
+  if(error){$('loginErr').textContent=error.message;return;}
+  await enterAdmin();
+};
+$('logoutBtn').onclick = async ()=>{ await db.auth.signOut(); showView('login'); };
+
+async function enterAdmin(){
+  const {data,error} = await db.from('themes').select('*').order('sort_order');
+  if(error){$('loginErr').textContent=error.message;showView('login');return;}
+  themes=data;
+  const sel=$('themeSel');sel.innerHTML='';
+  themes.forEach(t=>{const o=document.createElement('option');o.value=t.id;
+    o.textContent=t.name+' ('+t.slug+')';sel.appendChild(o);});
+  showView('admin');
+  selectTheme(themes[0].id);
+}
+
+/* ---------- selección de tema ---------- */
+$('themeSel').onchange = e=>selectTheme(e.target.value);
+$('statusSel').onchange = async e=>{
+  const {error}=await db.from('themes').update({status:e.target.value}).eq('id',theme.id);
+  if(error)return alert(error.message);
+  theme.status=e.target.value;
+};
+async function selectTheme(id){
+  theme=themes.find(t=>t.id===id);
+  $('statusSel').value=theme.status;
+  $('lblValue').textContent=VK_LABEL[theme.value_kind]||'Valor';
+  $('newValue').placeholder = theme.value_kind==='age_from_birth' ? 'p. ej. 1986' : '';
+  await loadCards();
+}
+
+/* ---------- cartas ---------- */
+async function loadCards(){
+  const {data,error}=await db.from('cards').select('*').eq('theme_id',theme.id)
+    .order('value_num',{ascending:true});
+  if(error){$('list').innerHTML='<div class="err">'+error.message+'</div>';return;}
+  cards=data;render();
+}
+$('search').oninput=render;
+
+function render(){
+  const q=$('search').value.trim().toLowerCase();
+  const list=$('list');list.innerHTML='';
+  const shown=cards.filter(c=>!q || (c.primary_text+' '+(c.category||'')).toLowerCase().includes(q));
+  $('count').textContent = shown.length+' carta'+(shown.length===1?'':'s')+(q?' (filtradas de '+cards.length+')':'');
+  shown.forEach(c=>list.appendChild(rowEl(c)));
+}
+
+function rowEl(c){
+  const row=document.createElement('div');
+  row.className='rowcard'+(c.active?'':' off');
+  const tx=document.createElement('input');tx.value=c.primary_text;
+  const cat=document.createElement('input');cat.value=c.category||'';
+  const val=document.createElement('input');val.type='number';val.value=c.value_num;
+  const chk=document.createElement('label');chk.className='chk';
+  const cb=document.createElement('input');cb.type='checkbox';cb.checked=c.active;
+  chk.appendChild(cb);chk.appendChild(document.createTextNode('activa'));
+  const save=document.createElement('button');save.className='btn-ghost';save.textContent='Guardar';
+  const del=document.createElement('button');del.className='btn-del';del.textContent='Borrar';
+
+  function markDirty(){row.classList.add('dirty');}
+  [tx,cat,val].forEach(el=>el.oninput=markDirty);
+  cb.onchange=()=>{markDirty();row.classList.toggle('off',!cb.checked);};
+
+  save.onclick=async ()=>{
+    save.textContent='…';
+    const {error}=await db.from('cards').update({
+      primary_text:tx.value.trim(), category:cat.value.trim()||null,
+      value_num:Number(val.value), active:cb.checked
+    }).eq('id',c.id);
+    if(error){alert(error.message);save.textContent='Guardar';return;}
+    Object.assign(c,{primary_text:tx.value.trim(),category:cat.value.trim()||null,value_num:Number(val.value),active:cb.checked});
+    row.classList.remove('dirty');save.textContent='Guardado';setTimeout(()=>save.textContent='Guardar',1200);
+  };
+  del.onclick=async ()=>{
+    if(!confirm('¿Borrar «'+c.primary_text+'»?'))return;
+    const {error}=await db.from('cards').delete().eq('id',c.id);
+    if(error){alert(error.message);return;}
+    cards=cards.filter(x=>x.id!==c.id);render();
+  };
+
+  const right=document.createElement('div');right.style.cssText='display:flex;gap:8px;justify-content:flex-end';
+  right.appendChild(save);right.appendChild(del);
+  row.appendChild(tx);row.appendChild(cat);row.appendChild(val);row.appendChild(chk);row.appendChild(right);
+  return row;
+}
+
+/* ---------- añadir carta ---------- */
+$('addBtn').onclick=async ()=>{
+  const primary=$('newPrimary').value.trim();
+  const value=$('newValue').value;
+  if(!primary || value===''){alert('Pon al menos el texto y el valor.');return;}
+  const {error}=await db.from('cards').insert({
+    theme_id:theme.id, primary_text:primary,
+    category:$('newCat').value.trim()||null, value_num:Number(value), active:true
+  });
+  if(error){alert(error.message);return;}
+  $('newPrimary').value='';$('newCat').value='';$('newValue').value='';
+  await loadCards();
+};
+
+boot();
+</script>
+</body>
+</html>
