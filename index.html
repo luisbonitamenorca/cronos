@@ -294,6 +294,19 @@ function buildSetup(){
     inp.placeholder='Jugador '+(i+1);inp.id='pname'+i;ni.appendChild(inp);}
 }
 
+/* ====================== ESTADÍSTICAS (registro de partidas) ====================== */
+let partidaInicioTs=0;
+function logEvento(tipo, extra){
+  // Fire-and-forget: nunca bloquea ni rompe el juego (p. ej. sin conexión).
+  if(!db || !theme) return;
+  try{
+    db.from('eventos').insert(Object.assign({
+      tipo:tipo, theme_id:theme.id, theme_slug:theme.slug,
+      theme_name:theme.name, num_jugadores:numPlayers
+    }, extra||{})).then(function(){}, function(){});
+  }catch(e){}
+}
+
 /* ====================== PARTIDA ====================== */
 function startGame(){
   const deck=shuffle(theme.deck);
@@ -301,6 +314,7 @@ function startGame(){
   for(let i=0;i<numPlayers;i++){const nm=($('pname'+i).value||'').trim()||('Jugador '+(i+1));
     players.push({name:nm,timeline:[deck.pop()]});}
   state={deck,players,turn:0,phase:'place',current:null};
+  partidaInicioTs=Date.now(); logEvento('inicio');
   $('restartBtn').style.display='';$('mPrompt').textContent=theme.prompt;
   show('gameScreen');nextCard();
 }
@@ -378,6 +392,8 @@ function endGame(){
   show('overScreen');
   const ranked=state.players.map((p,i)=>({...p,i})).sort((a,b)=>b.timeline.length-a.timeline.length);
   const top=ranked[0];const tie=ranked.filter(r=>r.timeline.length===top.timeline.length);
+  logEvento('fin',{ganador_cartas:top.timeline.length,
+    duracion_seg: partidaInicioTs ? Math.round((Date.now()-partidaInicioTs)/1000) : null});
   $('winnerName').textContent=tie.length>1?'¡Empate!':('Gana '+top.name);
   const board=$('board');board.innerHTML='';
   ranked.forEach(r=>{const row=document.createElement('div');
@@ -394,5 +410,8 @@ $('restartBtn').onclick=()=>{show('themeScreen');$('restartBtn').style.display='
 
 init();
 </script>
+<!-- Vercel Web Analytics -->
+<script>window.va=window.va||function(){(window.vai=window.vai||[]).push(arguments);};</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>

@@ -63,13 +63,34 @@
   .rowcard.dirty{border-color:var(--gold)}
   .rowcard.off{opacity:.55}
   .saved{color:var(--teal);font-size:12px;font-weight:600}
+
+  /* stats */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .stat-card{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:14px;padding:16px}
+  .stat-card .num{font-family:var(--display);font-weight:900;font-size:30px;color:var(--gold-soft);line-height:1}
+  .stat-card .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+  .stats-sec{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:14px;padding:16px;margin-bottom:16px}
+  .stats-sec h3{font-family:var(--display);font-weight:600;font-size:16px;margin-bottom:14px}
+  .bar-row{margin-bottom:11px}
+  .bar-row .top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+  .bar-row .top b{color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+  .bar-row .barwrap{background:var(--ink-3);border-radius:99px;height:9px;overflow:hidden}
+  .bar-row .bar{background:linear-gradient(90deg,var(--gold),var(--gold-soft));height:100%;border-radius:99px}
+  .smuted{color:var(--muted);font-size:13px;line-height:1.5}
+  table.recent{width:100%;border-collapse:collapse;font-size:13px}
+  table.recent td,table.recent th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--ink-3)}
+  table.recent th{color:var(--muted);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+  table.recent td.r{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="logo">CRO<span>NOS</span><small>Admin</small></div>
-    <button id="logoutBtn" class="btn-ghost hide">Cerrar sesión</button>
+    <div style="display:flex;gap:8px">
+      <button id="statsBtn" class="btn-ghost hide">Estadísticas</button>
+      <button id="logoutBtn" class="btn-ghost hide">Cerrar sesión</button>
+    </div>
   </header>
 
   <!-- LOGIN -->
@@ -113,6 +134,14 @@
     <div class="count" id="count">—</div>
     <div id="list"></div>
   </section>
+
+  <!-- ESTADÍSTICAS -->
+  <section id="statsView" class="hide">
+    <div class="stats-grid" id="statCards"></div>
+    <div class="stats-sec"><h3>Temas más jugados</h3><div id="byTheme"></div></div>
+    <div class="stats-sec"><h3>Jugadores por partida</h3><div id="byPlayers"></div></div>
+    <div class="stats-sec"><h3>Últimas partidas</h3><div id="recent"></div></div>
+  </section>
 </div>
 
 <script>
@@ -122,12 +151,17 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const VK_LABEL = {year:'Año', age_from_birth:'Año nacimiento', amount:'Precio', measure:'Valor'};
 const $=id=>document.getElementById(id);
-let db=null, themes=[], theme=null, cards=[];
+let db=null, themes=[], theme=null, cards=[], statsOpen=false;
 
 function showView(v){
   $('loginView').classList.toggle('hide', v!=='login');
   $('adminView').classList.toggle('hide', v!=='admin');
   $('logoutBtn').classList.toggle('hide', v!=='admin');
+  $('statsBtn').classList.toggle('hide', v!=='admin');
+  // al cambiar de vista, salir siempre de estadísticas
+  statsOpen=false;
+  $('statsView').classList.add('hide');
+  $('statsBtn').textContent='Estadísticas';
 }
 
 /* ---------- arranque + sesión ---------- */
@@ -246,6 +280,76 @@ $('addBtn').onclick=async ()=>{
   $('newPrimary').value='';$('newCat').value='';$('newValue').value='';
   await loadCards();
 };
+
+/* ---------- estadísticas ---------- */
+$('statsBtn').onclick = async ()=>{
+  statsOpen=!statsOpen;
+  $('adminView').classList.toggle('hide', statsOpen);
+  $('statsView').classList.toggle('hide', !statsOpen);
+  $('statsBtn').textContent = statsOpen ? '← Cartas' : 'Estadísticas';
+  if(statsOpen) await loadStats();
+};
+
+async function loadStats(){
+  $('statCards').innerHTML='<p class="smuted">Cargando…</p>';
+  $('byTheme').innerHTML=''; $('byPlayers').innerHTML=''; $('recent').innerHTML='';
+  const {data,error}=await db.from('eventos').select('*')
+    .order('created_at',{ascending:false}).limit(5000);
+  if(error){$('statCards').innerHTML='<p class="err">'+error.message+'</p>';return;}
+  renderStats(data||[]);
+}
+
+function fmtDur(s){ if(s==null) return '—'; const m=Math.floor(s/60), r=s%60; return m+'min '+(r<10?'0':'')+r+'s'; }
+function bars(container, pairs){
+  const max=Math.max(1,...pairs.map(p=>p[1]));
+  container.innerHTML = pairs.length ? pairs.map(([nm,ct])=>
+    '<div class="bar-row"><div class="top"><span>'+nm+'</span><b>'+ct+'</b></div>'+
+    '<div class="barwrap"><div class="bar" style="width:'+Math.round(ct/max*100)+'%"></div></div></div>'
+  ).join('') : '<p class="smuted">Sin datos todavía.</p>';
+}
+
+function renderStats(ev){
+  const inicios=ev.filter(e=>e.tipo==='inicio');
+  const fines=ev.filter(e=>e.tipo==='fin');
+  const total=inicios.length;
+
+  if(total===0){
+    $('statCards').innerHTML='<div class="stat-card"><div class="num">0</div><div class="lbl">Partidas</div></div>';
+    $('byTheme').innerHTML='<p class="smuted">Aún no se ha registrado ninguna partida. En cuanto alguien juegue, las estadísticas aparecerán aquí automáticamente.</p>';
+    return;
+  }
+
+  const weekAgo=Date.now()-7*864e5;
+  const last7=inicios.filter(e=>new Date(e.created_at).getTime()>=weekAgo).length;
+  const avgPlayers=(inicios.reduce((s,e)=>s+(e.num_jugadores||0),0)/total);
+  const durs=fines.map(e=>e.duracion_seg).filter(d=>d!=null && d>0);
+  const avgDur=durs.length?Math.round(durs.reduce((a,b)=>a+b,0)/durs.length):null;
+
+  $('statCards').innerHTML=
+    '<div class="stat-card"><div class="num">'+total+'</div><div class="lbl">Partidas totales</div></div>'+
+    '<div class="stat-card"><div class="num">'+last7+'</div><div class="lbl">Últimos 7 días</div></div>'+
+    '<div class="stat-card"><div class="num">'+avgPlayers.toFixed(1)+'</div><div class="lbl">Jugadores de media</div></div>'+
+    '<div class="stat-card"><div class="num">'+fmtDur(avgDur)+'</div><div class="lbl">Duración media</div></div>';
+
+  // por tema
+  const byT={};
+  inicios.forEach(e=>{const k=e.theme_name||e.theme_slug||'(desconocido)';byT[k]=(byT[k]||0)+1;});
+  bars($('byTheme'), Object.entries(byT).sort((a,b)=>b[1]-a[1]));
+
+  // por nº de jugadores
+  const byP={};
+  inicios.forEach(e=>{const k=(e.num_jugadores||'?');byP[k]=(byP[k]||0)+1;});
+  bars($('byPlayers'), Object.entries(byP)
+    .sort((a,b)=>Number(a[0])-Number(b[0]))
+    .map(([k,v])=>[k+(k==1?' jugador':' jugadores'), v]));
+
+  // últimas 10 partidas
+  const rows=inicios.slice(0,10).map(e=>{
+    const d=new Date(e.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    return '<tr><td>'+d+'</td><td>'+(e.theme_name||'—')+'</td><td class="r">'+(e.num_jugadores||'—')+'</td></tr>';
+  }).join('');
+  $('recent').innerHTML='<table class="recent"><thead><tr><th>Fecha</th><th>Tema</th><th class="r">Jug.</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
 
 boot();
 </script>
